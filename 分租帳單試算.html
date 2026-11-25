@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
+<body>
+<title>分租帳單試算</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* 版面：單欄工具頁，上方輸入（住戶、帳單），下方結果與可複製的訊息 */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --ink:#18232e; --muted:#5d6b78; --line:#d6dde4;
+  --accent:#1f5f8b; --accent-soft:#e3eef6;
+  --water:#2a7ab8; --power:#c98a12; --gas:#c2552f; --warn:#b3261e;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10161c; --panel:#18212a; --ink:#e4eaf0; --muted:#93a1ae; --line:#2b3743;
+  --accent:#6fb1e0; --accent-soft:#1c3346;
+  --water:#6cb4ea; --power:#e8b24a; --gas:#ee8a66; --warn:#f2867d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10161c; --panel:#18212a; --ink:#e4eaf0; --muted:#93a1ae; --line:#2b3743;
+  --accent:#6fb1e0; --accent-soft:#1c3346;
+  --water:#6cb4ea; --power:#e8b24a; --gas:#ee8a66; --warn:#f2867d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6}
+.wrap{max-width:880px;margin:0 auto;padding-block:28px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:20px}
+h1{font-size:1.6rem;margin:0;text-wrap:balance}
+h2{font-size:1.1rem;margin:0}
+.lead{color:var(--muted);margin:4px 0 0;max-width:62ch}
+section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hint{color:var(--muted);font-size:.85rem;margin:0}
+.rows{display:flex;flex-direction:column;gap:8px}
+.row{display:grid;gap:8px;align-items:end}
+.res-row{grid-template-columns:1.2fr .8fr 1fr 1fr auto}
+.bill-row{grid-template-columns:.8fr 1fr 1fr 1fr auto}
+@media (max-width:620px){
+  .res-row,.bill-row{grid-template-columns:1fr 1fr;padding:10px;border:1px solid var(--line);border-radius:8px}
+  .row .del{grid-column:span 2}
+}
+label{display:flex;flex-direction:column;gap:2px;font-size:.75rem;color:var(--muted);letter-spacing:.03em;min-width:0}
+input,select{font:inherit;font-size:.95rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%;min-width:0}
+input[type=number]{font-family:var(--mono)}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{font:inherit;cursor:pointer;border-radius:6px;padding:6px 12px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+button.del{color:var(--warn);border-color:transparent;background:transparent}
+button.del:hover{border-color:var(--line)}
+.opts{display:flex;gap:16px;flex-wrap:wrap}
+.opts label{flex-direction:row;align-items:center;gap:6px;font-size:.9rem;color:var(--ink);letter-spacing:0}
+.opts input{width:auto}
+.totals{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.tot{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.tot .who{font-size:.85rem;color:var(--muted)}
+.tot .amt{font-family:var(--mono);font-size:1.4rem;font-weight:600;font-variant-numeric:tabular-nums}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-weight:500;color:var(--muted);font-size:.8rem}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.bill-title{display:flex;align-items:center;gap:8px;font-weight:700;margin-top:6px}
+.tag{font-size:.75rem;padding:1px 8px;border-radius:99px;color:var(--panel);font-weight:500}
+.tag.水費{background:var(--water)}.tag.電費{background:var(--power)}.tag.瓦斯費{background:var(--gas)}
+.sub{color:var(--muted);font-size:.85rem;font-weight:400;font-family:var(--mono)}
+.err{color:var(--warn);font-size:.9rem;margin:0}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:var(--sans);white-space:pre-wrap;margin:0;font-size:.9rem}
+.status{font-size:.82rem;color:var(--muted);margin:6px 0 0}
+.status.bad{color:var(--warn)}
+.empty{color:var(--muted);font-size:.9rem;margin:0;padding:10px;border:1px dashed var(--line);border-radius:8px}
+button.del.sure{border-color:var(--warn)}
+body.ro .row button.del,body.ro #addRes,body.ro #addBill{display:none}
+.method{font-size:.88rem;color:var(--muted);margin:0;max-width:65ch}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>分租帳單試算</h1>
+    <p class="lead">填入每位住戶的入住與搬出日期、每張帳單的計費期間和金額，系統會逐日計算誰在住，依實際居住天數分攤。所有打開這個頁面的人看到的是同一份資料，改了會即時同步。</p>
+    <p class="status" id="status">連線中…</p>
+  </header>
+
+  <section>
+    <div class="head"><h2>住戶</h2><p class="hint">搬出日留空表示還在住；換人住同一間就新增一列</p></div>
+    <div class="rows" id="residents"></div>
+    <div><button id="addRes">新增住戶</button></div>
+  </section>
+
+  <section>
+    <div class="head"><h2>帳單</h2><p class="hint">計費期間依帳單上的「計費起訖日」填，含頭尾</p></div>
+    <div class="rows" id="bills"></div>
+    <div><button id="addBill">新增帳單</button></div>
+  </section>
+
+  <section>
+    <div class="head"><h2>空房期間怎麼算</h2></div>
+    <div class="opts">
+      <label><input type="radio" name="vac" id="vacShare" value="share" checked> 由當天有住的人平分</label>
+      <label><input type="radio" name="vac" id="vacExclude" value="exclude"> 空房那份不分攤（房東吸收）</label>
+    </div>
+    <p class="method">總房間數 <input type="number" id="roomCount" min="1" value="4" style="width:5em;display:inline-block"> 間。帳單金額先平均攤到每一天，每天再依當天有人住的房間平分；同一間同時有兩人時，該房那份再對半。最後四捨五入到元，尾差歸給金額最大的人。</p>
+  </section>
+
+  <section>
+    <div class="head"><h2>試算結果</h2></div>
+    <p class="err" id="errors" hidden></p>
+    <div class="totals" id="totals"></div>
+    <div id="detail"></div>
+    <div class="head"><h2>可貼到群組的訊息</h2><button class="primary" id="copyBtn">複製</button></div>
+    <pre id="msg"></pre>
+  </section>
+</div>
+
+<script>
+const state = {roomCount:4, vac:'share', residents:[], bills:[]};
+let db = null, canWrite = true, pendingInputs = false;
+const statusEl = document.getElementById('status');
+const setStatus = (t, bad) => { statusEl.textContent = t; statusEl.classList.toggle('bad', !!bad); };
+
+const DAY = 86400000;
+const toDay = s => { if(!s) return null; const [y,m,d]=s.split('-').map(Number); return Date.UTC(y,m-1,d)/DAY; };
+const fmt = n => Math.round(n).toLocaleString('zh-TW');
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function compute(){
+  const errs = [];
+  const rooms = Math.max(1, Number(state.roomCount)||4);
+  const res = state.residents.map((r,i)=>({...r, i, a:toDay(r.in), b:r.out?toDay(r.out):Infinity}));
+  res.forEach(r=>{
+    if(!r.name) errs.push(`第 ${r.i+1} 位住戶沒有名字`);
+    if(r.a==null) errs.push(`${r.name||'第 '+(r.i+1)+' 位住戶'} 沒有入住日`);
+    else if(r.b<r.a) errs.push(`${r.name} 的搬出日早於入住日`);
+  });
+  const out = state.bills.map((b,bi)=>{
+    const s=toDay(b.start), e=toDay(b.end), amt=Number(b.amount)||0;
+    if(s==null||e==null){errs.push(`第 ${bi+1} 張帳單缺少計費日期`);return null;}
+    if(e<s){errs.push(`第 ${bi+1} 張帳單結束日早於開始日`);return null;}
+    const days=e-s+1, daily=amt/days;
+    const share=new Map(), pdays=new Map(); let unpaid=0, emptyAll=0;
+    for(let d=s; d<=e; d++){
+      const here=res.filter(r=>r.a!=null&&r.a<=d&&d<=r.b);
+      const byRoom={}; here.forEach(r=>{(byRoom[r.room||'?']??=[]).push(r)});
+      const occ=Object.keys(byRoom).length;
+      if(!occ){unpaid+=daily; emptyAll++; continue;}
+      const perRoom = state.vac==='share' ? daily/occ : daily/rooms;
+      if(state.vac!=='share') unpaid += daily - perRoom*occ;
+      for(const k in byRoom){ const g=byRoom[k]; g.forEach(r=>{
+        share.set(r.i,(share.get(r.i)||0)+perRoom/g.length);
+        pdays.set(r.i,(pdays.get(r.i)||0)+1);
+      });}
+    }
+    const rows=[...share.entries()].map(([i,v])=>({r:res[i],raw:v,amt:Math.round(v),days:pdays.get(i)}));
+    const target=Math.round(amt-unpaid), diff=target-rows.reduce((t,x)=>t+x.amt,0);
+    if(rows.length&&diff){[...rows].sort((x,y)=>y.raw-x.raw)[0].amt+=diff;}
+    if(emptyAll) errs.push(`${b.type} 有 ${emptyAll} 天沒有任何人住，那幾天的費用沒有人分攤`);
+    return {b,days,amt,rows,unpaid:amt-target};
+  });
+  return {errs,bills:out.filter(Boolean)};
+}
+
+function renderInputs(){
+  const ro = canWrite ? '' : ' disabled';
+  document.getElementById('residents').innerHTML = state.residents.length ? state.residents.map((r,i)=>`
+    <div class="row res-row">
+      <label>姓名<input id="rn-${r.id}" data-k="residents" data-i="${i}" data-f="name" value="${esc(r.name)}"${ro}></label>
+      <label>房間<input id="rr-${r.id}" data-k="residents" data-i="${i}" data-f="room" value="${esc(r.room)}"${ro}></label>
+      <label>入住日<input id="ri-${r.id}" type="date" data-k="residents" data-i="${i}" data-f="in" value="${esc(r.in)}"${ro}></label>
+      <label>搬出日<input id="ro-${r.id}" type="date" data-k="residents" data-i="${i}" data-f="out" value="${esc(r.out)}"${ro}></label>
+      <button class="del" data-del="residents" data-i="${i}">刪除</button>
+    </div>`).join('') : '<p class="empty">還沒有住戶。按「新增住戶」填入每個人的房間和入住日。</p>';
+  document.getElementById('bills').innerHTML = state.bills.length ? state.bills.map((b,i)=>`
+    <div class="row bill-row">
+      <label>項目<select id="bt-${b.id}" data-k="bills" data-i="${i}" data-f="type"${ro}>
+        ${['電費','水費','瓦斯費'].map(t=>`<option${t===b.type?' selected':''}>${t}</option>`).join('')}</select></label>
+      <label>計費起<input id="bs-${b.id}" type="date" data-k="bills" data-i="${i}" data-f="start" value="${esc(b.start)}"${ro}></label>
+      <label>計費迄<input id="be-${b.id}" type="date" data-k="bills" data-i="${i}" data-f="end" value="${esc(b.end)}"${ro}></label>
+      <label>金額（元）<input id="ba-${b.id}" type="number" min="0" inputmode="numeric" data-k="bills" data-i="${i}" data-f="amount" value="${esc(b.amount)}"${ro}></label>
+      <button class="del" data-del="bills" data-i="${i}">刪除</button>
+    </div>`).join('') : '<p class="empty">還沒有帳單。收到帳單後按「新增帳單」，填計費期間和金額。</p>';
+  const rc=document.getElementById('roomCount'); rc.value=state.roomCount; rc.disabled=!canWrite;
+  document.getElementById(state.vac==='share'?'vacShare':'vacExclude').checked=true;
+  document.querySelectorAll('input[name=vac]').forEach(x=>x.disabled=!canWrite);
+  pendingInputs=false;
+}
+
+function renderResults(){
+  const {errs,bills}=compute();
+  const e=document.getElementById('errors');
+  e.hidden=!errs.length; e.textContent=errs.join('；');
+  const tot=new Map();
+  bills.forEach(x=>x.rows.forEach(r=>{const k=r.r.name+'|'+r.r.room; tot.set(k,(tot.get(k)||0)+r.amt)}));
+  document.getElementById('totals').innerHTML=[...tot.entries()].map(([k,v])=>{
+    const [n,room]=k.split('|'); return `<div class="tot"><div class="who">${esc(n)}・${esc(room)} 房</div><div class="amt">$${fmt(v)}</div></div>`}).join('');
+  document.getElementById('detail').innerHTML=bills.map(x=>`
+    <div class="bill-title"><span class="tag ${esc(x.b.type)}">${esc(x.b.type)}</span>
+      <span class="sub">${esc(x.b.start)} ~ ${esc(x.b.end)}・${x.days} 天・$${fmt(x.amt)}${x.unpaid?`・空房未分攤 $${fmt(x.unpaid)}`:''}</span></div>
+    <div class="tbl"><table><thead><tr><th>住戶</th><th>房間</th><th class="num">居住天數</th><th class="num">應付</th></tr></thead>
+    <tbody>${x.rows.map(r=>`<tr><td>${esc(r.r.name)}</td><td>${esc(r.r.room)}</td><td class="num">${r.days}/${x.days}</td><td class="num">$${fmt(r.amt)}</td></tr>`).join('')}</tbody></table></div>`).join('');
+  let m=bills.map(x=>`【${x.b.type}】${x.b.start} ~ ${x.b.end}，共 $${fmt(x.amt)}\n`+
+    x.rows.map(r=>`${r.r.name}（${r.r.room}，住 ${r.days} 天）$${fmt(r.amt)}`).join('\n')).join('\n\n');
+  if(tot.size) m+='\n\n【合計】\n'+[...tot.entries()].map(([k,v])=>`${k.split('|')[0]} $${fmt(v)}`).join('\n');
+  document.getElementById('msg').textContent=m||'填完住戶和帳單後，這裡會產生可以貼到群組的分攤訊息。';
+}
+
+// 有人正在輸入時先不重畫輸入欄，等離開欄位再更新
+function refresh(){
+  const a=document.activeElement;
+  if(a && a.dataset && a.dataset.k){ pendingInputs=true; } else renderInputs();
+  renderResults();
+}
+document.addEventListener('focusout',()=>setTimeout(()=>{ if(pendingInputs && !(document.activeElement?.dataset?.k)) renderInputs(); },0));
+
+async function write(fn){
+  if(!db) { saveLocal(); return; }
+  try{ await fn(); }
+  catch(e){
+    if(e.code==='invalid_argument'){ canWrite=false; document.body.classList.add('ro'); setStatus('你只有檢視權限，無法修改資料'); renderInputs(); }
+    else if(e.code==='quota_exceeded'){ setStatus('資料量已達上限，請先刪除舊帳單', true); }
+    else setStatus('儲存失敗，請稍後再試', true);
+  }
+}
+
+document.addEventListener('input',ev=>{
+  const t=ev.target; if(!t.dataset.k) return;
+  state[t.dataset.k][t.dataset.i][t.dataset.f]=t.value; renderResults();
+});
+document.addEventListener('change',ev=>{
+  const t=ev.target;
+  if(t.dataset.k){
+    const item=state[t.dataset.k][t.dataset.i], f=t.dataset.f;
+    const v = f==='amount' ? (t.value===''?'':Number(t.value)) : t.value;
+    item[f]=v;
+    write(()=>db.doc(`${t.dataset.k}/${item.id}`).update({[f]:v}));
+  } else if(t.id==='roomCount'){
+    state.roomCount=Number(t.value)||4; renderResults();
+    write(()=>db.doc('settings/main').set({roomCount:state.roomCount, vac:state.vac}));
+  } else if(t.name==='vac'){
+    state.vac=t.value; renderResults();
+    write(()=>db.doc('settings/main').set({roomCount:state.roomCount, vac:state.vac}));
+  }
+});
+document.addEventListener('click',ev=>{
+  const t=ev.target; if(!t.dataset.del) return;
+  if(!t.classList.contains('sure')){ t.classList.add('sure'); t.textContent='確定刪除？';
+    setTimeout(()=>{t.classList.remove('sure');t.textContent='刪除'},3000); return; }
+  const k=t.dataset.del, item=state[k][+t.dataset.i];
+  state[k].splice(+t.dataset.i,1); renderInputs(); renderResults();
+  write(()=>db.doc(`${k}/${item.id}`).delete());
+});
+function addItem(k, body){
+  const id = (crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(36).slice(2)).replace(/[^a-zA-Z0-9-]/g,'');
+  const item={...body, created:Date.now()};
+  state[k].push({...item,id}); renderInputs(); renderResults();
+  write(()=>db.doc(`${k}/${id}`).set(item));
+}
+document.getElementById('addRes').onclick=()=>addItem('residents',{name:'',room:'',in:'',out:''});
+document.getElementById('addBill').onclick=()=>addItem('bills',{type:'電費',start:'',end:'',amount:''});
+document.getElementById('copyBtn').onclick=async ev=>{
+  const b=ev.currentTarget, txt=document.getElementById('msg').textContent;
+  try{ await navigator.clipboard.writeText(txt); b.textContent='已複製'; }
+  catch(e){ const r=document.createRange(); r.selectNodeContents(document.getElementById('msg'));
+    const s=getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent='已選取，請按複製'; }
+  setTimeout(()=>b.textContent='複製',1800);
+};
+
+// 無法連到共享資料時，退回只存在這台裝置
+const LKEY='bill-split-v1';
+function saveLocal(){ try{ localStorage.setItem(LKEY, JSON.stringify(state)); }catch(e){} }
+function loadLocal(){
+  try{ const s=JSON.parse(localStorage.getItem(LKEY)); if(s&&Array.isArray(s.residents)){
+    Object.assign(state,s);
+    state.residents.forEach((r,i)=>r.id??='l'+i); state.bills.forEach((b,i)=>b.id??='b'+i);
+  } }catch(e){}
+}
+
+renderInputs(); renderResults();
+
+(async()=>{
+  db = window.claude?.use ? await window.claude.use('db') : null;
+  if(!db){ loadLocal(); refresh(); setStatus('資料存在這台裝置的瀏覽器'); return; }
+  const user = await window.claude.use('user');
+  const w = user ? await user.can('data.write') : null;
+  if(w===false){ canWrite=false; document.body.classList.add('ro'); }
+  let ready={residents:false,bills:false,settings:false};
+  const timer=setTimeout(()=>setStatus('資料暫時讀不到，畫面可能不是最新的', true),10000);
+  const done=(k,snap)=>{ if(!snap.metadata.fromCache){ ready[k]=true; }
+    if(ready.residents&&ready.bills&&ready.settings){ clearTimeout(timer);
+      setStatus(canWrite?'已同步：大家看到的是同一份資料':'你只有檢視權限，無法修改資料'); } };
+  const onErr=e=>{ clearTimeout(timer); setStatus('連線中斷，請重新整理頁面', true); };
+  for(const k of ['residents','bills']){
+    db.collection(k).orderBy('created').onSnapshot(snap=>{
+      state[k]=snap.docs.map(d=>({...d.data(), id:d.id}));
+      refresh(); done(k,snap);
+    }, onErr);
+  }
+  db.doc('settings/main').onSnapshot(snap=>{
+    if(snap.exists){ const d=snap.data(); state.roomCount=d.roomCount??4; state.vac=d.vac??'share'; }
+    refresh(); done('settings',snap);
+  }, onErr);
+})();
+</script>
+
+</body>
+</html>
